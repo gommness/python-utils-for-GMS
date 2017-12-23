@@ -1,6 +1,6 @@
 """
 README!
-this python script has been made by @PinkOnion_
+this python script has been made by @gommness (AKA @PinkOnion_)
 
 This script may be used with a Game Maker Studio project. I am not sure if it works for Game Maker Studio 2 but it may work.
 The purpose of this script is to read data from a room file and create a jpeg file that is a scaled picture of said room
@@ -61,7 +61,7 @@ col = {
 ##############################################################################
 
 print "\nthanks for using this script!"
-print "author's twitter: @PinkOnion_   come by and say hi!"
+print "author's twitter: @gommness or @PinkOnion_   come by and say hi!"
 try:
 	from PIL import Image, ImageDraw
 except:

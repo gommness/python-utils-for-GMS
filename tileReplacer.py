@@ -108,8 +108,8 @@ class CustomException(Exception):
 
 ts_registry = {}
 room_registry = {}
-roomFolder = ""
-backgroundFolder = ""
+roomFolder = "rooms"
+backgroundFolder = "background"
 abbreviation = 1
 ts_src=None
 ts_dst=None
@@ -122,11 +122,22 @@ execStack=[]
 def help():
 	print __doc__+"\n"
 
+def prepareFileName(s,typ):
+	'using the abbreviaton variables as well as the folder names, returns the prepared name of the file'
+	global backgroundFolder, roomFolder, abbreviation
+	if abbreviation == 1:
+		s = s.split(".")[0]+"."+typ+".gmx"
+	if typ == "room":
+		s = os.path.join(roomFolder,s)
+	else:
+		s = os.path.join(backgroundFolder,s)
+	return s
 
 class tileSet():
 	def __init__(self, ts_name):
 		try:
-			tree=ET.parse(ts_name)
+			self.ts_file = prepareFileName(ts_name, "background")
+			tree=ET.parse(self.ts_file)
 			root=tree.getroot()
 			if not root.tag == "background":
 				raise CustomException("file '"+ts_name+"' is not a background file")
@@ -144,12 +155,12 @@ class tileSet():
 		except CustomException as inst:
 			raise inst
 	def withinLimits(self,x,y):
-		return (x >= self.xSize or y >= self.ySize)
-	def posToCoord(px,py):
-		cx = self.xOff+px*self.tileWidth
-		cy = self.yOff+py*self.tileHeight
-		return (cx,cy)
-	def coordToPos(cx,cy):
+		return (x < self.xSize and y < self.ySize)
+	def posToCoord(self,px,py):
+		cx = self.xOff+px*(self.tileWidth+self.hSep)
+		cy = self.yOff+py*(self.tileHeight+self.vSep)
+		return (str(cx),str(cy))
+	def coordToPos(self,cx,cy):
 		px = (cx-self.xOff)/(self.tileWidth+self.hSep)
 		py = (cy-self.yOff)/(self.tileHeight+self.vSep)
 		return (px,py)
@@ -174,8 +185,6 @@ def cleanExecution():
 	for t in execStack:
 		del t
 	execStack=[]
-	ts_registry = {}
-	room_registry = {}
 
 def collapse(str,s):
 	'if the substring s repeats within str, collapses them into a single one s'
@@ -226,17 +235,6 @@ def unset(s):
 	else:
 		print "warning. unknown unset variable "+s
 
-def prepareFileName(s,typ):
-	'using the abbreviaton variables as well as the folder names, returns the prepared name of the file'
-	global backgroundFolder, roomFolder, abbreviation
-	if abbreviation == 1:
-		s = s.split(".")[0]+"."+typ+".gmx"
-	if typ == "room":
-		s = os.path.join(roomFolder,s)
-	else:
-		s = os.path.join(backgroundFolder,s)
-	return s
-
 def loadSrc(s):
 	"loads the ts_src from the filename s"
 	global ts_registry, ts_src
@@ -273,7 +271,7 @@ def parseTiles(s):
 	'given a string containing the coordinates with the syntax as specified in the pydoc:\
 	\nfetchs the numbers and returns them in a list.'
 	numbers = re.sub("[)(,<)]+"," ",s)[1:-1].split(" ")
-	if not (len(n) == 4):
+	if not (len(numbers) == 4):
 		raise CustomException("malformed tiles tuples")
 	return [ int(x) for x in numbers ]
 
@@ -283,7 +281,7 @@ def isValidFile(s, type):
 	\ntype is the type of the file'
 	return os.path.isfile(s) and ET.parse(s).getroot().tag == type
 
-def replace(args):
+def replace(arg):
 	'on room, replaces the tiles as follows:\
 	\nthe room where the replacement takes place is in the variable room.\
 	\nthe tileSet where the tile to be replaced is located is in the variable ts_dst\
@@ -293,9 +291,9 @@ def replace(args):
 	\nif there is any ocurrence of destination tile within room, it will be replaced with the source tile'
 	global ts_dst, ts_src
 	if not (ts_dst.withinLimits(arg[0],arg[1]) and ts_src.withinLimits(arg[2],arg[3])):
-		raise CustomException("tile coordinates out of tileSet limits.")
+		raise CustomException("tile coordinates out of tileSet limits: "+str(arg[0],arg[1]) +str(arg[2],arg[3]))
 	for tag in room.getroot().iter('tile'):
-		if tag.get("bgName")==ts_dst.name and (tag.get("xo"), tag.get("yo")) == ts_dst.posToCoord(args[0],args[1]):
+		if tag.get("bgName")==ts_dst.name and (tag.get("xo"), tag.get("yo")) == ts_dst.posToCoord(arg[0],arg[1]):
 			tag.set("bgName", ts_src.name)
 			coord=ts_src.posToCoord(arg[2],arg[3])
 			tag.set("xo",coord[0])
@@ -342,15 +340,15 @@ def parse(s):
 				execStack.append((loadRoom,word))
 				context = None
 			elif context == "replace":
-				word = prepareFileName(word,"background")
-				if not os.path.isfile(word):
+				aux = prepareFileName(word,"background")
+				if not os.path.isfile(aux):
 					raise CustomException("expecting background file.")
 					break
 				execStack.append((loadDst,word))
 				context = None
 			elif context == "with":
-				word = prepareFileName(word,"background")
-				if not os.path.isfile(word):
+				aux = prepareFileName(word,"background")
+				if not os.path.isfile(aux):
 					raise CustomException("expecting background file.")
 					break
 				execStack.append((loadSrc,word))
@@ -392,7 +390,7 @@ def parse(s):
 				context = None
 			elif context == "tiles":
 				positions = parseTiles(word)
-				execStack.append(replace, positions)
+				execStack.append((replace, positions))
 
 			lastWord=word.lower()
 		if not (context == None or context == "tiles"):
@@ -417,7 +415,9 @@ def save():
 	global room_registry
 	try:
 		for roomName, roomTree in room_registry.iteritems():
+			print "saving: "+roomName
 			roomTree.write(roomName)
+		clear()
 	except:
 		print "ERROR DURING SAVING ROUTINE."
 		clear()
